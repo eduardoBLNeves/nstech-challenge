@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Nstech.OrderService.Api/Nstech.OrderService.Api.csproj" DefaultStartup="true" />
+    <Project Path="src/Nstech.OrderService.Application/Nstech.OrderService.Application.csproj" />
+    <Project Path="src/Nstech.OrderService.Domain/Nstech.OrderService.Domain.csproj" />
+    <Project Path="src/Nstech.OrderService.Infrastructure/Nstech.OrderService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Nstech.OrderService.Application.Tests/Nstech.OrderService.Application.Tests.csproj" />
+  </Folder>
+</Solution>

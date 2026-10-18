@@ -1,185 +1,137 @@
-# Teste Técnico — Desenvolvedor(a) .NET Sênior (3 dias)
+# Order Service
 
-> **Objetivo:** avaliar arquitetura, qualidade de código, domínio, testes, performance, boas práticas e entrega “pronta para produção” (no essencial).
->
-> **Tempo sugerido:** até **3 dias corridos**.
+API de pedidos com itens, estoque e autenticação JWT.
 
----
+## Como rodar
 
-## Como entregar
+### Docker
 
-1. Implemente a solução conforme o enunciado.
-2. Ao final, envie:
-   - Link do repositório
-   - Instruções para rodar (README)
-   - Observações/decisões técnicas (no README ou em `/docs/decisions.md`)
+Na raiz do repositório:
 
----
+```bash
+docker compose up --build
+```
 
-## Stack e restrições
+A API roda em http://localhost:18482. 
+O banco de dados Postgres sobe junto, na porta 15432, e a API aplica as migrations sozinha na primeira vez que roda, subindo também o seed com alguns dados para consulta.
+As credenciais do banco de dados de desenvolvimento são: usuário: `orders` e senha:`orders`.
+Após o `up`, o Swagger estará disponivel em http://localhost:18482/swagger/index.html
 
-- **.NET**: preferencialmente **.NET 8+**
-- **Linguagem**: C#
-- **Persistência**: **EF Core** com **migrations**
-- **Banco**: Postgres (via Docker)
-- **API**: ASP.NET Core Web API ou Minimal API (sua escolha)
-- **Async/await** end-to-end
-- **Arquitetura**: separar claramente **Domain / Application / Infrastructure / API**
-- **Testes**: xUnit ou NUnit
-- **Docker**: `docker compose up` deve subir a API + banco
 
----
+Para parar:
 
-## Domínio: Order Service
+```bash
+docker compose down
+```
 
-Você irá construir uma API REST para gestão de **Pedidos** com itens e validação de estoque.
+O volume `pgdata` guarda o banco entre um `up` e outro. `docker compose down -v` apaga esse volume.
 
-### Entidades (mínimo sugerido)
+### Local
 
-- **Order**
-  - Id
-  - CustomerId
-  - Status (`Draft`, `Placed`, `Confirmed`, `Canceled`)
-  - Currency
-  - Itens
-  - Total
-  - CreatedAt
-- **OrderItem**
-  - ProductId
-  - UnitPrice
-  - Quantity
-- **Product / Stock** (pode ser simples)
-  - ProductId
-  - UnitPrice
-  - AvailableQuantity (ou modelo de estoque equivalente)
+Pra subir apenas o banco e rodar a API na máquina:
 
-> Você tem liberdade para ajustar o modelo desde que as regras sejam atendidas.
+```bash
+docker compose up db -d
+dotnet run --project src/Nstech.OrderService.Api
+```
 
----
+## Variáveis de ambiente
 
-## Requisitos funcionais (MUST)
+| Variável | Uso |
+| --- | --- |
+| `ConnectionStrings__Default` | Connection string do Postgres |
+| `Jwt__Issuer` | Emissor do token |
+| `Jwt__Audience` | Audiência do token |
+| `Jwt__Key` | Key de no mínimo 32 caracteres |
+| `Jwt__ExpiresMinutes` | Validade do token (minutos) |
 
-### 1) Criar pedido
+No Compose e no perfil local esses valores já estão definidos. As chaves servem só para este projeto.
 
-`POST /orders`
+## Autenticação
 
-- Payload mínimo:
-  - `customerId`
-  - `currency`
-  - `items: [{ productId, quantity }]`
-- Regras:
-  - Não pode criar pedido sem itens
-  - Quantidade deve ser > 0
-  - Produto deve existir
-  - **Não pode exceder estoque disponível** (conforme seu modelo)
-  - Total do pedido = soma (`unitPrice * quantity`) de cada item
-- Estado:
-  - pedido nasce como `Placed` (ou `Draft` -> `Placed`, se preferir justificar)
+`POST /auth/login`
 
-### 2) Confirmar pedido (idempotente)
+```json
+{
+  "email": "user@example.com",
+  "password": "12345678"
+}
+```
 
-`POST /orders/{id}/confirm`
+A resposta traz `accessToken` e `expiresAt`. Nos outros endpoints envie `Authorization: Bearer {accessToken}`.
 
-- Regras:
-  - Só confirma pedido em `Placed`
-  - Confirmação deve reservar/baixar estoque (conforme sua modelagem)
-  - Se o endpoint for chamado 2x, deve manter o mesmo resultado (idempotência)
-- Estado:
-  - `Placed` -> `Confirmed`
+No Swagger, use o botão Authorize e cole só o token (não é necessario o prefixo `Bearer`).
 
-### 3) Cancelar pedido (idempotente)
+## Dados do Seed (Criados no primeiro Run da API)
 
-`POST /orders/{id}/cancel`
+Usuário: `user@example.com` / `12345678`.
 
-- Regras:
-  - Pode cancelar `Placed` e `Confirmed`
-  - Cancelamento deve liberar estoque reservado (se aplicável)
-  - Endpoint deve ser idempotente
-- Estado:
-  - `Placed/Confirmed` -> `Canceled`
+Produtos:
 
-### 4) Consultar pedido
+| Produto | Id | Preço | Estoque |
+| --- | --- | --- | --- |
+| Notebook | `11111111-1111-1111-1111-111111111111` | 3500.00 | 20 |
+| Mouse | `22222222-2222-2222-2222-222222222222` | 80.00 | 100 |
+| Keyboard | `33333333-3333-3333-3333-333333333333` | 220.00 | 50 |
 
-`GET /orders/{id}`
-
-- Deve retornar pedido + itens (DTO adequado)
-
-### 5) Listar pedidos (com paginação e filtro)
-
-`GET /orders?customerId=&status=&from=&to=&page=&pageSize=`
-
-- Paginação obrigatória
-- Filtros básicos:
-  - `customerId`
-  - `status`
-  - intervalo de datas (criação)
-
----
-
-## Requisitos não funcionais (MUST)
-
-### Clean Architecture / SOLID
-
-- O projeto deve ser implementado seguindo os princípios de Clean Architecture e SOLID.
-
-### Testes (TDD-friendly)
-
-- Cobertura de testes para regras de negócio, casos de borda e cenários importantes.
-- Testes devem rodar com `dotnet test`.
-
-### Segurança (mínimo)
-
-- Autenticação via **JWT**.
-
-### Performance (mínimo)
-
-- Modelagem e consultas devem ser eficientes.
-
-### Operacional
-
-- `docker compose up` sobe API + banco.
-- Migrations aplicadas automaticamente.
-- README com passos para rodar, testar e usar.
-
----
 
 ## Endpoints
 
-- `POST /auth/token`
-- `POST /orders`
-- `POST /orders/{id}/confirm`
-- `POST /orders/{id}/cancel`
-- `GET /orders/{id}`
-- `GET /orders`
+### Criar pedido
 
----
+`POST /orders`
 
-## O que avaliamos
+```json
+{
+  "customerId": "44444444-4444-4444-4444-444444444444",
+  "currency": "BRL",
+  "items": [
+    { "productId": "22222222-2222-2222-2222-222222222222", "quantity": 2 }
+  ]
+}
+```
 
-- Qualidade da arquitetura e separação de responsabilidades
-- DDD prático: invariantes, coesão, modelagem, value objects (se aplicável)
-- SOLID e Clean Code (nomes, acoplamento, legibilidade)
-- Testes: cobertura de regras e casos importantes, legibilidade
-- EF Core: modelagem, migrations, queries, tracking/performance
-- Segurança: auth JWT e autorização básica
-- Entrega: Docker, README, experiência de rodar
+O pedido nasce `Placed`. Precisa ter item, quantidade maior que zero, produto existente e saldo suficiente. Criação de itens responde 201.
 
----
+### Confirmar
 
-## Checklist mínimo (para considerarmos “completo”)
+`POST /orders/{id}/confirm`
 
-- [ ] API roda local e via Docker
-- [ ] Migrations aplicadas automaticamente
-- [ ] Endpoints MUST implementados
-- [ ] JWT + autorização básica funcionando
-- [ ] `dotnet test` passando
-- [ ] README com passo a passo
+Só confirma `Placed` e baixa o estoque. Chamar de novo devolve o mesmo pedido, sem baixar outra vez. Confirmar um pedido cancelado responde 409.
 
----
+### Cancelar
 
-## Próximas etapas
+`POST /orders/{id}/cancel`
 
-- Após a entrega, avaliaremos o projeto e, após o cumprimento dos requisitos, teremos uma conversa técnica para discutir suas escolhas, desafios e aprendizados.
+Cancela `Placed` ou `Confirmed`. Se estava confirmado, o estoque volta. Chamar de novo devolve o pedido já cancelado.
 
-Boa sorte e boa entrega!
- 
+### Consultar
+
+`GET /orders/{id}`
+
+Devolve o pedido e os itens. 404 se não existir.
+
+### Listar
+
+`GET /orders?customerId=&status=&from=&to=&page=&pageSize=`
+
+`status` aceita `Draft`, `Placed`, `Confirmed` ou `Canceled`. `from` e `to` filtram `createdAt` e são inclusivos.
+
+Exemplo:
+
+```bash
+curl.exe http://localhost:18482/orders?page=1&pageSize=20 -H "Authorization: Bearer SEU_TOKEN"
+```
+
+## Migrations
+
+Elas rodam no startup. Também pode ser rodada manualmente:
+
+```bash
+dotnet tool restore
+dotnet ef migrations add Nome --project src/Nstech.OrderService.Infrastructure --startup-project src/Nstech.OrderService.Api --output-dir Persistence/Migrations
+```
+
+## Decisões
+
+As demais decisões técnicas foram documentadas em: [docs/decisions.md](docs/decisions.md).
